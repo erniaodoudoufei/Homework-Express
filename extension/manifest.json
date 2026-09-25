@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "学科网 · 作业直达",
+  "version": "1.1.0",
+  "description": "按学生姓名一键打开对应教材的组卷网章节选题、智能组卷和学科网资源页。",
+  "minimum_chrome_version": "120",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "作业直达（Alt+Shift+Z）" },
+  "options_page": "popup.html?full",
+  "commands": {
+    "_execute_action": { "suggested_key": { "default": "Alt+Shift+Z" }, "description": "打开作业直达面板" }
+  },
+  "omnibox": { "keyword": "zy" },
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "content_scripts": [
+    {
+      "matches": ["https://zujuan.xkw.com/*"],
+      "js": ["content/zujuan.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://zujuan.xkw.com/*"],
+      "js": ["content/basket-main.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ],
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'" }
+}

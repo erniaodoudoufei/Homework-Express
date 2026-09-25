@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>学科网 · 作业直达</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header class="header">
+      <div class="brand-icon" aria-hidden="true">作</div>
+      <div class="brand"><h1>作业直达</h1><p>学生 → 章节选题 / 智能组卷 / 学科网</p></div>
+      <button id="manage" class="icon-btn" title="教材档案与备份">⚙</button>
+    </header>
+
+    <section id="view-list" class="view">
+      <div class="search-row">
+        <input id="q" type="search" placeholder="姓名 / 拼音首字母，如 zs" autocomplete="off" aria-label="搜索学生">
+        <button id="add" class="primary">＋ 学生</button>
+      </div>
+      <ul id="list" class="list"></ul>
+      <p id="empty" class="empty" hidden></p>
+      <p class="hint">↑↓ 选择 · Enter 章节选题 · Ctrl+Enter 智能组卷 · Shift+Enter 学科网<br>Ctrl+点击按钮在后台打开 · 地址栏输入 <b>zy 姓名</b> 也可直达</p>
+    </section>
+
+    <section id="view-student" class="view" hidden>
+      <h2 class="view-title"><button class="back" data-back>←</button><span id="student-title">新增学生</span></h2>
+      <form id="student-form" class="form">
+        <label>姓名<input name="name" required maxlength="20"></label>
+        <label>教材档案
+          <div class="inline"><select name="profileId"></select><button type="button" id="new-profile" class="ghost">＋ 新建档案</button></div>
+        </label>
+        <label>搜索别名 <small>可选，如拼音、英文名，多音字搜不到时补上</small><input name="alias" maxlength="40"></label>
+        <label>备注 <small>可选，如地区、上课时间</small><input name="note" maxlength="60"></label>
+        <div class="form-actions"><button class="primary" type="submit">保存</button><button type="button" class="ghost" data-back>取消</button><button type="button" id="delete-student" class="danger" hidden>删除学生</button></div>
+      </form>
+    </section>
+
+    <section id="view-profile" class="view" hidden>
+      <h2 class="view-title"><button class="back" data-back>←</button><span id="profile-title">新建教材档案</span></h2>
+      <div id="capture" class="capture">
+        <p><b>先在网站上点到这个学生教材的页面，</b>再点下面按钮自动填入。</p>
+        <p id="capture-page" class="capture-page"></p>
+        <button type="button" id="capture-btn" class="primary">用当前页面填入</button>
+        <p id="capture-status" class="status" role="status"></p>
+      </div>
+      <form id="profile-form" class="form">
+        <label>档案名称 <small>输入 . 或空格，保存时会自动变成 ·</small><input name="name" required maxlength="30" placeholder="如 浙教版·九上"></label>
+        <label>章节选题网址 <small>组卷网 · 选好版本和年级后的页面</small><input name="chapterUrl" type="url" placeholder="https://zujuan.xkw.com/czsx/zj260620/"></label>
+        <label>智能组卷网址 <small>一个学段共用一个，留空则按章节选题网址自动生成</small><input name="zhinengUrl" type="url" placeholder="https://zujuan.xkw.com/czsx/zhineng/"></label>
+        <div class="two">
+          <label>教材 versionid <small>自动选教材用</small><input name="versionId" inputmode="numeric" placeholder="199373"></label>
+          <label>年级 <small>自动定位用</small><input name="grade" placeholder="九年级上册"></label>
+        </div>
+        <input name="versionName" type="hidden">
+        <label>学科网网址 <small>学科网 · 该教材的资源页</small><input name="xkwUrl" type="url" placeholder="https://sx.zxxk.com/m/books-b8116/"></label>
+        <div class="form-actions"><button class="primary" type="submit">保存档案</button><button type="button" class="ghost" data-back>取消</button><button type="button" id="delete-profile" class="danger" hidden>删除档案</button></div>
+      </form>
+    </section>
+
+    <section id="view-manage" class="view" hidden>
+      <h2 class="view-title"><button class="back" data-back>←</button><span>教材档案与备份</span></h2>
+      <div class="section-head"><strong>教材档案</strong><button id="manage-new-profile" class="ghost">＋ 新建档案</button></div>
+      <ul id="profiles" class="list compact"></ul>
+      <div class="section-head"><strong>试题篮</strong></div>
+      <label class="setting"><input id="check-basket" type="checkbox"><span>从插件打开组卷网时，检查试题篮里有没有上次留下的题<small>有旧题会在页面顶部提醒，可一键清空</small></span></label>
+      <div class="section-head"><strong>备份</strong></div>
+      <div class="backup">
+        <button id="export" class="ghost">导出备份</button>
+        <label class="ghost file-btn">导入备份<input id="import" type="file" accept=".json,application/json" hidden></label>
+        <button id="open-full" class="ghost">在新标签页打开</button>
+      </div>
+      <p id="backup-status" class="status" role="status"></p>
+      <p class="hint">数据只保存在这台电脑的 Chrome 里。换电脑或重装插件前，请先导出备份。</p>
+    </section>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
