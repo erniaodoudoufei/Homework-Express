@@ -92,6 +92,43 @@ export function zhinengFromChapter(url) {
   return match ? `https://zujuan.xkw.com/${match[1]}/zhineng/` : '';
 }
 
+// 按钮文字：档案可自定义（非学科网学生用，如「Claude 作业」），没填用默认名
+export const buttonLabel = (profile, kind) => profile?.labels?.[kind]?.trim() || KINDS[kind].name;
+
+export const isZujuanChapter = url => /^https:\/\/zujuan\.xkw\.com\/[a-z]+\/zj\d+\/?(?:[?#]|$)/.test(url || '');
+export const isZujuanZhineng = url => /^https:\/\/zujuan\.xkw\.com\/[a-z]+\/zhineng\//.test(url || '');
+
+// 组卷网章节选题页的原始 HTML 里：选中的版本按钮带 versionid，选中的年级按钮带 data-qbmid，
+// 而 data-qbmid 就是学科网的书本编号（sx.zxxk.com/{学段}/books-b{编号}/）
+export const XKW_STAGE = { czsx: 'm', gzsx: 'h', xxsx: 'p' };
+const decodeEntities = text => text
+  .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+  .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
+  .replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+  .trim();
+const attr = (attrs, name) => new RegExp(`(?:^|\\s)${name}="([^"]*)"`).exec(attrs)?.[1] || '';
+function selectedLink(html, id) {
+  const start = html.indexOf(`id="${id}"`);
+  if (start < 0) return null;
+  const block = html.slice(start, html.indexOf('</div>', start));
+  for (const [, attrs, text] of block.matchAll(/<a\b([^>]*)>([^<]*)<\/a>/g)) {
+    if (/\bselected\b/.test(attr(attrs, 'class'))) return { attrs, text: decodeEntities(text) };
+  }
+  return null;
+}
+export function parseChapterPage(html, chapterUrl) {
+  const version = selectedLink(html, 'chapter_textbook_version');
+  const book = selectedLink(html, 'chapter_textbooks');
+  const stage = XKW_STAGE[/^https:\/\/zujuan\.xkw\.com\/([a-z]+)\//.exec(chapterUrl || '')?.[1]];
+  const qbmid = book && attr(book.attrs, 'data-qbmid');
+  return {
+    versionId: version ? attr(version.attrs, 'versionid') : '',
+    versionName: version?.text || '',
+    grade: book?.text || '',
+    xkwUrl: stage && qbmid ? `https://sx.zxxk.com/${stage}/books-b${qbmid}/` : ''
+  };
+}
+
 export async function markUsed(studentId) {
   await mutate(data => { const s = data.students.find(x => x.id === studentId); if (s) s.lastUsed = Date.now(); });
 }
@@ -107,16 +144,17 @@ export async function open(studentId, kind, { tab } = {}) {
   return true;
 }
 
-// 年级缩写：九年级上册 → 九上；必修第一册 → 必修一
+// 年级缩写：九年级上册 → 九上；必修 第一册 → 必修一
 export function shortGrade(grade) {
-  const m = /^(.)年级([上下])册$/.exec(grade || '');
+  const text = (grade || '').replace(/\s+/g, '');
+  const m = /^(.)年级([上下])册$/.exec(text);
   if (m) return m[1] + m[2];
-  return (grade || '').replace(/第(.)册/, '$1').replace(/册$/, '');
+  return text.replace(/第(.)册/, '$1').replace(/册$/, '');
 }
 
 // 从页面标题兜底识别版本和年级（组卷网以页面里选中的按钮为准）
 const VERSION_RE = /(人教[AB]版|人教版|北师大版|华东师大版|华师大版|苏科版|苏教版|北京版|沪教版|沪科版|冀教版|鲁教版|青岛版|湘教版|浙教版|浙科版|粤教版)(（[^）]*）)*/;
-const GRADE_RE = /([一二三四五六七八九]年级[上下]册|选择性必修第[一二三四]册|必修第[一二三四]册)/;
+const GRADE_RE = /([一二三四五六七八九]年级[上下]册|选择性必修\s?第[一二三四]册|必修\s?第[一二三四]册)/;
 export function parseTitle(title) {
   return { versionName: VERSION_RE.exec(title || '')?.[0] || '', grade: GRADE_RE.exec(title || '')?.[0] || '' };
 }

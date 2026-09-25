@@ -1,4 +1,4 @@
-import { KINDS, load, save, mutate, upsert, search, targetUrl, open, zhinengFromChapter, shortGrade, parseTitle, validateImport } from './store.js';
+import { KINDS, load, save, mutate, upsert, search, targetUrl, open, zhinengFromChapter, shortGrade, parseTitle, validateImport, buttonLabel, isZujuanChapter } from './store.js';
 
 const $ = selector => document.querySelector(selector);
 const full = location.search.includes('full');
@@ -51,6 +51,7 @@ function renderList() {
   results = search(data, $('#q').value);
   active = Math.min(active, Math.max(results.length - 1, 0));
   $('#list').replaceChildren(...results.map((r, i) => row(r, i)));
+  $('#count').textContent = data.students.length ? `${$('#q').value.trim() ? `${results.length} / ` : ''}${data.students.length} 个学生` : '';
   const empty = $('#empty');
   empty.hidden = results.length > 0;
   if (!data.students.length) empty.replaceChildren('还没有学生。', h('br'), '点右上角「＋ 学生」，添加第一个学生。');
@@ -59,21 +60,22 @@ function renderList() {
     empty.replaceChildren(`没有找到「${name}」`, h('br'), h('button', { className: 'ghost', textContent: `新增学生「${name}」`, onclick: () => newStudent(name) }));
   }
 }
+// 一个学生一行：姓名 · 教材 · 备注 …… [按钮] ✎；没设网址的按钮不显示
 function row({ student, profile }, i) {
-  const acts = Object.keys(KINDS).map((kind, k) => {
-    const url = targetUrl(profile, kind);
-    const button = h('button', { textContent: KINDS[kind].name, disabled: !url, title: url ? `${['Enter', 'Ctrl+Enter', 'Shift+Enter'][k]} · ${url.split('#')[0]}` : '这个教材档案还没设置此网址' });
+  const keys = ['Enter', 'Ctrl+Enter', 'Shift+Enter'];
+  const acts = Object.keys(KINDS).filter(kind => targetUrl(profile, kind)).map(kind => {
+    const button = h('button', { textContent: buttonLabel(profile, kind), title: `${keys[Object.keys(KINDS).indexOf(kind)]} · ${targetUrl(profile, kind)}` });
     button.addEventListener('click', e => go(student.id, kind, e.ctrlKey || e.metaKey));
     button.addEventListener('auxclick', e => { if (e.button === 1) go(student.id, kind, true); });
     return button;
   });
   return h('li', { className: `row${i === active ? ' active' : ''}` },
-    h('div', { className: 'who' },
+    h('div', { className: 'who', title: [student.name, profile?.name, student.note].filter(Boolean).join(' · ') },
       h('b', { textContent: student.name }),
       h('span', { className: `tag${profile ? '' : ' missing'}`, textContent: profile?.name || '未设置教材' }),
-      h('small', { textContent: student.note || '' }),
-      h('button', { className: 'edit', textContent: '✎ 编辑', title: '编辑学生', onclick: () => editStudent(student.id) })),
-    h('div', { className: 'acts' }, acts));
+      h('small', { textContent: student.note || '' })),
+    h('div', { className: 'acts' }, acts.length ? acts : h('span', { className: 'no-link', textContent: '未设置网址' })),
+    h('button', { className: 'edit', textContent: '✎', title: '编辑学生', onclick: () => editStudent(student.id) }));
 }
 async function go(studentId, kind, background) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -169,6 +171,9 @@ function resetConfirm(button, label) {
 function fillProfileForm(values = {}) {
   const form = $('#profile-form');
   for (const key of ['name', 'chapterUrl', 'zhinengUrl', 'versionId', 'versionName', 'grade', 'xkwUrl']) form.elements[key].value = values[key] || '';
+  // 草稿里是表单字段 label-xxx，已保存的档案里是 labels.xxx
+  for (const kind of Object.keys(KINDS)) form.elements[`label-${kind}`].value = values.labels?.[kind] ?? values[`label-${kind}`] ?? '';
+  $('#labels').open = Object.keys(KINDS).some(kind => form.elements[`label-${kind}`].value);
   $('#profile-title').textContent = editing.profile ? '编辑教材档案' : '新建教材档案';
   $('#delete-profile').hidden = !editing.profile;
   resetConfirm($('#delete-profile'), '删除档案');
@@ -187,7 +192,17 @@ $('#profile-form').addEventListener('submit', async e => {
   // 档案名称统一用间隔号：「浙教版.九上」「浙教版 九上」都存成「浙教版·九上」
   values.name = values.name.replace(/\s*[.。•・‧∙·]\s*|\s+/g, '·');
   if (!values.name) return;
+  values.labels = {};
+  for (const kind of Object.keys(KINDS)) {
+    if (values[`label-${kind}`]) values.labels[kind] = values[`label-${kind}`];
+    delete values[`label-${kind}`];
+  }
   if (!values.zhinengUrl) values.zhinengUrl = zhinengFromChapter(values.chapterUrl);
+  // 换了章节选题网址（换了书），而其余各项还是旧书的：清掉，由后台按新网址重新自动补全
+  const old = data.profiles.find(p => p.id === editing.profile);
+  if (old && isZujuanChapter(values.chapterUrl) && old.chapterUrl !== values.chapterUrl) {
+    for (const key of ['versionId', 'versionName', 'grade', 'xkwUrl']) if (values[key] === (old[key] || '')) values[key] = '';
+  }
   const saved = await mutate(d => upsert(d.profiles, { ...(editing.profile ? { id: editing.profile } : {}), ...values }));
   data = await load();
   editing.profile = null;
@@ -288,7 +303,7 @@ function renderManage() {
   const counts = Object.groupBy(data.students, s => s.profileId);
   const sorted = [...data.profiles].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
   $('#profiles').replaceChildren(...sorted.map(p => h('li', { className: 'row' },
-    h('div', {}, h('b', { textContent: p.name }), h('small', { textContent: `${counts[p.id]?.length || 0} 个学生${p.versionId ? ` · 智能组卷自动选教材（${p.grade || '不定位年级'}）` : ' · 未设置 versionid'}` })),
+    h('div', {}, h('b', { textContent: p.name }), h('small', { textContent: `${counts[p.id]?.length || 0} 个学生 · ${!isZujuanChapter(p.chapterUrl) ? '自定义链接' : p.versionId ? `智能组卷自动选教材（${p.grade || '不定位年级'}）` : '教材信息自动补全中…'}` })),
     h('button', { className: 'ghost', textContent: '编辑', onclick: () => editProfile(p.id) }))));
   if (!sorted.length) $('#profiles').replaceChildren(h('p', { className: 'empty', textContent: '还没有教材档案。' }));
   $('#check-basket').checked = data.settings?.checkBasket !== false;
