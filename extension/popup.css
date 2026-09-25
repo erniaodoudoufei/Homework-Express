@@ -40,7 +40,7 @@ input:focus,select:focus{border-color:var(--accent);outline:none}
 .tag.missing{color:#a4482d;background:#fff0e8}
 .who small{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .acts{display:flex;gap:5px;flex-shrink:0}
-.acts button{border:1px solid #d5dee5;background:#f7f9fb;border-radius:7px;padding:5px 10px;color:var(--ink);font-size:12px;white-space:nowrap;max-width:8em;overflow:hidden;text-overflow:ellipsis}
+.acts button{border:1px solid #d5dee5;background:#f7f9fb;border-radius:7px;padding:5px 10px;color:var(--ink);font-size:12px;white-space:nowrap;max-width:11em;overflow:hidden;text-overflow:ellipsis}
 .acts button:hover{background:var(--accent);border-color:var(--accent);color:#fff}
 .no-link{font-size:11px;color:#a4482d}
 .edit{border:none;background:none;color:var(--muted);width:26px;height:26px;border-radius:6px;font-size:14px;flex-shrink:0}
