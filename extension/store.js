@@ -92,6 +92,31 @@ export function zhinengFromChapter(url) {
   return match ? `https://zujuan.xkw.com/${match[1]}/zhineng/` : '';
 }
 
+// 学生列表的颜色分组：小学、初中按年级，高中按册别；非组卷网档案或识别不出的归「其他」。
+// 先看档案的年级字段（会被自动补全），没有再看档案名称（如「北师大·八上」「人教A版·必修一」）
+export const GROUPS = [
+  { key: 'g7', name: '七年级', color: '#0f95a3', test: /七年级|七[上下]/ },
+  { key: 'g8', name: '八年级', color: '#2f6fd6', test: /八年级|八[上下]/ },
+  { key: 'g9', name: '九年级', color: '#7b4bd1', test: /九年级|九[上下]/ },
+  { key: 'x1', name: '选必一', color: '#d6456f', test: /选择性必修第?一|选必一/ },
+  { key: 'x2', name: '选必二', color: '#b04aa0', test: /选择性必修第?二|选必二/ },
+  { key: 'x3', name: '选必三', color: '#9c3d54', test: /选择性必修第?三|选必三/ },
+  { key: 'b1', name: '必修一', color: '#e07b16', test: /必修第?一/ },
+  { key: 'b2', name: '必修二', color: '#b8860b', test: /必修第?二/ },
+  { key: 'b3', name: '必修三', color: '#c0532f', test: /必修第?三/ },
+  { key: 'pri', name: '小学', color: '#2e9d5b', test: /[一二三四五六]年级|[一二三四五六][上下]/ }
+];
+export const OTHER_GROUP = { key: 'other', name: '其他', color: '#8a94a0' };
+export function gradeGroup(profile) {
+  if (!profile || !isZujuanChapter(profile.chapterUrl)) return OTHER_GROUP;
+  for (const text of [profile.grade, profile.name]) {
+    const plain = (text || '').replace(/\s+/g, '');
+    const group = plain && GROUPS.find(g => g.test.test(plain));
+    if (group) return group;
+  }
+  return OTHER_GROUP;
+}
+
 // 按钮文字：档案可自定义（非学科网学生用，如「Claude 作业」），没填用默认名
 export const buttonLabel = (profile, kind) => profile?.labels?.[kind]?.trim() || KINDS[kind].name;
 

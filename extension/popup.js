@@ -1,4 +1,4 @@
-import { KINDS, load, save, mutate, upsert, search, targetUrl, open, zhinengFromChapter, shortGrade, parseTitle, validateImport, buttonLabel, isZujuanChapter } from './store.js';
+import { KINDS, load, save, mutate, upsert, search, targetUrl, open, zhinengFromChapter, shortGrade, parseTitle, validateImport, buttonLabel, isZujuanChapter, gradeGroup, GROUPS, OTHER_GROUP } from './store.js';
 
 const $ = selector => document.querySelector(selector);
 const full = location.search.includes('full');
@@ -7,6 +7,7 @@ document.body.classList.toggle('full', full);
 let data = { profiles: [], students: [] };
 let results = [];
 let active = 0;
+let groupFilter = 'all'; // 颜色筛选：all 或某个分组 key，每次打开面板都从「全部」开始
 let stack = ['list'];
 let editing = { student: null, profile: null, returnToStudent: false };
 
@@ -47,21 +48,51 @@ async function restoreDraft() {
 }
 
 // ---------- 学生列表 ----------
+// 分组在筛选条里的顺序：小学 → 初中 → 高中各册 → 其他
+const GROUP_ORDER = ['pri', 'g7', 'g8', 'g9', 'b1', 'b2', 'b3', 'x1', 'x2', 'x3', 'other'];
+const ALL_GROUPS = Object.fromEntries([...GROUPS, OTHER_GROUP].map(g => [g.key, g]));
+
 function renderList() {
-  results = search(data, $('#q').value);
+  const matched = search(data, $('#q').value).map(r => ({ ...r, group: gradeGroup(r.profile) }));
+  results = groupFilter === 'all' ? matched : matched.filter(r => r.group.key === groupFilter);
   active = Math.min(active, Math.max(results.length - 1, 0));
   $('#list').replaceChildren(...results.map((r, i) => row(r, i)));
-  $('#count').textContent = data.students.length ? `${$('#q').value.trim() ? `${results.length} / ` : ''}${data.students.length} 个学生` : '';
+  renderGroups(matched);
+  const filtered = $('#q').value.trim() || groupFilter !== 'all';
+  $('#count').textContent = data.students.length ? `${filtered ? `${results.length} / ` : ''}${data.students.length} 个学生` : '';
   const empty = $('#empty');
   empty.hidden = results.length > 0;
   if (!data.students.length) empty.replaceChildren('还没有学生。', h('br'), '点右上角「＋ 学生」，添加第一个学生。');
+  else if (!results.length && !$('#q').value.trim()) empty.replaceChildren(`「${ALL_GROUPS[groupFilter]?.name}」里没有学生。`);
   else if (!results.length) {
     const name = $('#q').value.trim();
     empty.replaceChildren(`没有找到「${name}」`, h('br'), h('button', { className: 'ghost', textContent: `新增学生「${name}」`, onclick: () => newStudent(name) }));
   }
 }
-// 一个学生一行：姓名 · 教材 · 备注 …… [按钮] ✎；没设网址的按钮不显示
-function row({ student, profile }, i) {
+// 颜色筛选条：只列出学生里实际有的分组（人数按当前搜索结果算），学生只有一种分组时不显示
+function renderGroups(matched) {
+  const present = new Set(data.students.map(s => gradeGroup(data.profiles.find(p => p.id === s.profileId)).key));
+  const box = $('#groups');
+  box.hidden = present.size < 2;
+  if (box.hidden) { groupFilter = 'all'; return; }
+  const chip = (key, name, color, count) => {
+    const button = h('button', { className: `chip${groupFilter === key ? ' on' : ''}`, title: key === 'all' ? '显示全部学生' : `只看${name}` },
+      key === 'all' ? null : h('i'), name, h('b', { textContent: String(count) }));
+    button.style.setProperty('--c', color);
+    button.addEventListener('click', () => {
+      groupFilter = groupFilter === key ? 'all' : key;
+      active = 0;
+      renderList();
+      $('#q').focus();
+    });
+    return button;
+  };
+  box.replaceChildren(chip('all', '全部', 'var(--accent)', matched.length),
+    ...GROUP_ORDER.filter(key => present.has(key)).map(key => chip(key, ALL_GROUPS[key].name, ALL_GROUPS[key].color, matched.filter(r => r.group.key === key).length)));
+}
+
+// 一个学生一行：[头像] 姓名 · 教材 · 备注 …… [按钮] ✎；颜色按年级 / 册别，没设网址的按钮不显示
+function row({ student, profile, group }, i) {
   const keys = ['Enter', 'Ctrl+Enter', 'Shift+Enter'];
   const acts = Object.keys(KINDS).filter(kind => targetUrl(profile, kind)).map(kind => {
     const button = h('button', { textContent: buttonLabel(profile, kind), title: `${keys[Object.keys(KINDS).indexOf(kind)]} · ${targetUrl(profile, kind)}` });
@@ -69,13 +100,16 @@ function row({ student, profile }, i) {
     button.addEventListener('auxclick', e => { if (e.button === 1) go(student.id, kind, true); });
     return button;
   });
-  return h('li', { className: `row${i === active ? ' active' : ''}` },
+  const li = h('li', { className: `row${i === active ? ' active' : ''}`, title: group.name },
+    h('span', { className: 'avatar', textContent: [...student.name][0] || '?' }),
     h('div', { className: 'who', title: [student.name, profile?.name, student.note].filter(Boolean).join(' · ') },
       h('b', { textContent: student.name }),
       h('span', { className: `tag${profile ? '' : ' missing'}`, textContent: profile?.name || '未设置教材' }),
       h('small', { textContent: student.note || '' })),
     h('div', { className: 'acts' }, acts.length ? acts : h('span', { className: 'no-link', textContent: '未设置网址' })),
     h('button', { className: 'edit', textContent: '✎', title: '编辑学生', onclick: () => editStudent(student.id) }));
+  li.style.setProperty('--c', group.color);
+  return li;
 }
 async function go(studentId, kind, background) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -302,9 +336,13 @@ $('#capture-btn').addEventListener('click', async () => {
 function renderManage() {
   const counts = Object.groupBy(data.students, s => s.profileId);
   const sorted = [...data.profiles].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
-  $('#profiles').replaceChildren(...sorted.map(p => h('li', { className: 'row' },
-    h('div', {}, h('b', { textContent: p.name }), h('small', { textContent: `${counts[p.id]?.length || 0} 个学生 · ${!isZujuanChapter(p.chapterUrl) ? '自定义链接' : p.versionId ? `智能组卷自动选教材（${p.grade || '不定位年级'}）` : '教材信息自动补全中…'}` })),
-    h('button', { className: 'ghost', textContent: '编辑', onclick: () => editProfile(p.id) }))));
+  $('#profiles').replaceChildren(...sorted.map(p => {
+    const li = h('li', { className: 'row' },
+      h('div', {}, h('b', { textContent: p.name }), h('small', { textContent: `${gradeGroup(p).name} · ${counts[p.id]?.length || 0} 个学生 · ${!isZujuanChapter(p.chapterUrl) ? '自定义链接' : p.versionId ? `智能组卷自动选教材（${p.grade || '不定位年级'}）` : '教材信息自动补全中…'}` })),
+      h('button', { className: 'ghost', textContent: '编辑', onclick: () => editProfile(p.id) }));
+    li.style.setProperty('--c', gradeGroup(p).color);
+    return li;
+  }));
   if (!sorted.length) $('#profiles').replaceChildren(h('p', { className: 'empty', textContent: '还没有教材档案。' }));
   $('#check-basket').checked = data.settings?.checkBasket !== false;
 }
