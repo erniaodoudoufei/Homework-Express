@@ -10,16 +10,19 @@
   // 服务器同步请求完成后会出现在资源记录里，据此判断「已从服务器拉到最新」「清空已提交」
   const synced = name => performance.getEntriesByType('resource').filter(e => e.name.includes(`/zujuan-api/${name}`)).length;
 
+  // 计数方式和网站自己画试题篮时一致：先按本页学段从本地存储重新载入试题篮，草稿用 GetQuesIDList
   function read() {
     const manager = window.ZujuanCom?.QuestionBasketModule?.questionBasketManager;
     const paper = window.ZujuanCom?.Paper;
     try {
       if (!manager?.findAllQuestionIds || !paper?.QuesCount) return { ready: false };
+      manager.initQuestions?.();
       return {
         ready: true,
         basket: manager.findAllQuestionIds().length,
-        draft: paper.QuesCount(),
-        synced: synced('sync_baskets') > 0,
+        draft: typeof paper.GetQuesIDList === 'function' ? paper.GetQuesIDList().length : paper.QuesCount(),
+        // 页面加载时会分别向服务器同步试题篮和组卷草稿，两个都回来了才算准
+        synced: synced('sync_baskets') > 0 && synced('sync_version') > 0,
         canClear: typeof manager.clearBasket === 'function' && typeof window.ZujuanCom.quesBasketOperation?.emptyQuesBatch === 'function'
       };
     } catch {

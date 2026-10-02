@@ -70,16 +70,21 @@
     return Number.isNaN(n) ? null : n;
   };
   // 读题数（试题篮 basket + 组卷草稿 draft）：优先网站函数，读不到时退回图标上的角标数字
-  async function readBag() {
+  // stable：隔 1.5 秒读两次取较小值防误报；清空后的确认只要读一次
+  async function readBag({ stable = true } = {}) {
     const ready = await until(async () => {
       const r = await ask('bag-count');
       return r?.ready ? r : null;
     });
     if (ready) {
-      // 已登录时试题篮要等页面从服务器同步下来才准
+      // 已登录时要等试题篮和组卷草稿都从服务器同步下来才准；
+      // 之后隔 1.5 秒读两次取较小值，避免页面初始化途中的瞬时数字造成误报
       await until(async () => (await ask('bag-count'))?.synced, 6000);
-      await sleep(500);
-      const bag = (await ask('bag-count')) || ready;
+      await sleep(800);
+      const first = (await ask('bag-count')) || ready;
+      if (stable) await sleep(1500);
+      const second = stable ? (await ask('bag-count')) || first : first;
+      const bag = { ...second, basket: Math.min(first.basket, second.basket), draft: Math.min(first.draft, second.draft) };
       return { ...bag, total: bag.basket + bag.draft };
     }
     const basket = badgeCount();
@@ -138,7 +143,9 @@
 
   async function remindBag() {
     const bag = await readBag();
-    if (!bag?.total) return;
+    // 只在试题篮里有题时提醒：网站自己也是试题篮为空时不显示「有组卷草稿未完成」，
+    // 老师眼里试题篮是空的，单有草稿就提醒会像误报。草稿题数只作为附带信息显示
+    if (!bag?.basket) return;
     const root = mount(`<div class="txt">${describe(bag)}之前的题，会和这次的作业混在一起。<small>一键清空会同时清掉试题篮和组卷草稿，15 天内可在【我的 - 选题记录】找回</small></div><button class="primary">一键清空</button><button class="ghost">保留</button>`);
     const [clear, keep] = root.querySelectorAll('button');
     keep.onclick = close;
@@ -151,7 +158,7 @@
   }
 
   async function confirmCleared() {
-    const bag = await readBag();
+    const bag = await readBag({ stable: false });
     if (bag?.total) manual(`${describe(bag)}，可能没清空成功。`);
     else toast('✓ 试题篮和组卷草稿已清空，可以开始选这次的题了');
   }
