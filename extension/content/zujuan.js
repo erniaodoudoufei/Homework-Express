@@ -69,7 +69,7 @@
     const n = parseInt(document.querySelector('#quescount2')?.textContent, 10);
     return Number.isNaN(n) ? null : n;
   };
-  // 读题数（试题篮 basket + 组卷草稿 draft）：优先网站函数，读不到时退回图标上的角标数字
+  // 读试题篮题数：优先网站函数，读不到时退回图标上的角标数字（组卷草稿是另一个地方，不管）
   // stable：隔 1.5 秒读两次取较小值防误报；清空后的确认只要读一次
   async function readBag({ stable = true } = {}) {
     const ready = await until(async () => {
@@ -77,20 +77,18 @@
       return r?.ready ? r : null;
     });
     if (ready) {
-      // 已登录时要等试题篮和组卷草稿都从服务器同步下来才准；
+      // 已登录时要等试题篮从服务器同步下来才准；
       // 之后隔 1.5 秒读两次取较小值，避免页面初始化途中的瞬时数字造成误报
       await until(async () => (await ask('bag-count'))?.synced, 6000);
       await sleep(800);
       const first = (await ask('bag-count')) || ready;
       if (stable) await sleep(1500);
       const second = stable ? (await ask('bag-count')) || first : first;
-      const bag = { ...second, basket: Math.min(first.basket, second.basket), draft: Math.min(first.draft, second.draft) };
-      return { ...bag, total: bag.basket + bag.draft };
+      return { ...second, basket: Math.min(first.basket, second.basket) };
     }
     const basket = badgeCount();
-    return basket == null ? null : { basket, draft: 0, total: basket, canClear: false };
+    return basket == null ? null : { basket, canClear: false };
   }
-  const describe = ({ basket, draft }) => [basket && `试题篮里还有 <b>${basket}</b> 道`, draft && `组卷草稿里还有 <b>${draft}</b> 道`].filter(Boolean).join('、');
 
   function mount(html) {
     document.getElementById('zyzd-host')?.remove();
@@ -121,7 +119,7 @@
     else document.addEventListener('visibilitychange', later, { once: true });
   }
   function manual(text) {
-    const root = mount(`<div class="txt">${text}<small>请点页面右侧的「试题篮」，全选后删除；组卷草稿在「继续编辑」里清空。</small></div><button class="ghost">知道了</button>`);
+    const root = mount(`<div class="txt">${text}<small>请点页面右侧的「试题篮」，全选后删除。</small></div><button class="ghost">知道了</button>`);
     root.querySelector('button').onclick = close;
     document.querySelector('[data-type="quesBasketNav"]')?.click();
   }
@@ -143,10 +141,8 @@
 
   async function remindBag() {
     const bag = await readBag();
-    // 只在试题篮里有题时提醒：网站自己也是试题篮为空时不显示「有组卷草稿未完成」，
-    // 老师眼里试题篮是空的，单有草稿就提醒会像误报。草稿题数只作为附带信息显示
     if (!bag?.basket) return;
-    const root = mount(`<div class="txt">${describe(bag)}之前的题，会和这次的作业混在一起。<small>一键清空会同时清掉试题篮和组卷草稿，15 天内可在【我的 - 选题记录】找回</small></div><button class="primary">一键清空</button><button class="ghost">保留</button>`);
+    const root = mount(`<div class="txt">试题篮里还有 <b>${bag.basket}</b> 道之前的题，会和这次的作业混在一起。<small>清空后 15 天内可在【我的 - 选题记录】找回</small></div><button class="primary">一键清空</button><button class="ghost">保留</button>`);
     const [clear, keep] = root.querySelectorAll('button');
     keep.onclick = close;
     clear.onclick = () => {
@@ -159,8 +155,8 @@
 
   async function confirmCleared() {
     const bag = await readBag({ stable: false });
-    if (bag?.total) manual(`${describe(bag)}，可能没清空成功。`);
-    else toast('✓ 试题篮和组卷草稿已清空，可以开始选这次的题了');
+    if (bag?.basket) manual(`试题篮里还剩 ${bag.basket} 道题，可能没清空成功。`);
+    else toast('✓ 试题篮已清空，可以开始选这次的题了');
   }
 
   if (versionId && location.pathname.includes('/zhineng/')) selectTextbook();
