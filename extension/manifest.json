@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "学科网 · 作业直达",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "按学生姓名一键打开对应教材的组卷网章节选题、智能组卷和学科网资源页。",
   "minimum_chrome_version": "120",
   "permissions": ["storage", "activeTab", "scripting"],
@@ -21,8 +21,8 @@
       "run_at": "document_start"
     },
     {
-      "matches": ["https://ke.mathgao.com/*"],
-      "js": ["content/schedule.js"],
+      "matches": ["https://ke.mathgao.com/*", "https://ke.7711111.xyz/*"],
+      "js": ["content/schedule-bridge.js", "content/schedule.js"],
       "run_at": "document_idle"
     },
     {

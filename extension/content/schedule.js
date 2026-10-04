@@ -5,11 +5,11 @@
   // 时间轴卡片 / 紧凑模式的一行；以及其中的学生姓名
   const CARD = 'article.timeline-lesson, label.lesson-row';
   const NAME = '.timeline-lesson-copy strong, .lesson-name';
-  const usable = card => card && !card.classList.contains('organizing') && card.querySelector(NAME)?.textContent.trim();
+  const usable = card => card && !card.hasAttribute('data-homework-integrated') && !card.classList.contains('organizing') && card.querySelector(NAME)?.textContent.trim();
 
   const host = document.createElement('div');
   host.id = 'zyzd-schedule';
-  host.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483646';
+  host.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:calc(var(--z-toolbar, 100) + 5)';
   const root = host.attachShadow({ mode: 'open' });
   root.innerHTML = `<style>
     *{box-sizing:border-box;font-family:"Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif}

@@ -1,7 +1,65 @@
 import { KINDS, SEED, load, save, mutate, search, open, targetUrl, buttonLabel, isZujuanChapter, isZujuanZhineng, zhinengFromChapter, parseChapterPage, findStudentByName, gradeGroup } from './store.js';
+import { allowedScheduleSender, bindingKey, BINDINGS_KEY, BRIDGE_VERSION, describeStudent, resolveStudent, SCHEDULE_ACTIONS } from './schedule-links.js';
+
+// Serialize association writes separately from the existing student/profile store.
+let bindingWrites = Promise.resolve();
+function withBindings(fn) {
+  const result = bindingWrites.then(async () => {
+    const data = await load();
+    const stored = await chrome.storage.local.get(BINDINGS_KEY);
+    const bindings = stored[BINDINGS_KEY] || {};
+    const before = JSON.stringify(bindings);
+    const value = await fn(data, bindings);
+    if (JSON.stringify(bindings) !== before) await chrome.storage.local.set({ [BINDINGS_KEY]: bindings });
+    return value;
+  });
+  bindingWrites = result.catch(() => {});
+  return result;
+}
+
+async function scheduleRequest(message, sender) {
+  if (!allowedScheduleSender(sender) || !SCHEDULE_ACTIONS.includes(message.action)) throw new Error('不允许此页面连接插件。');
+  if (message.action === 'HELLO') return { bridgeVersion: BRIDGE_VERSION, pluginVersion: chrome.runtime.getManifest().version };
+  const context = message.context;
+  const key = bindingKey(context);
+  if (typeof context.name !== 'string' || !context.name.trim() || context.name.length > 200) throw new Error('学生姓名无效。');
+  return withBindings(async (data, bindings) => {
+    if (message.action === 'LIST') return data.students.map(s => describeStudent(data, s));
+    if (message.action === 'BIND') {
+      const student = data.students.find(s => s.id === message.extensionStudentId);
+      if (!student) throw new Error('插件学生不存在，请重新选择。');
+      bindings[key] = student.id;
+      return { status: 'found', ...describeStudent(data, student) };
+    }
+    const result = resolveStudent(data, bindings, context);
+    if (result.status === 'found') bindings[key] = result.extensionStudentId;
+    if (message.action === 'RESOLVE') return result;
+    if (message.action === 'MANAGE') {
+      const params = new URLSearchParams({ full: '' });
+      if (message.mode === 'add') params.set('add', context.name.trim());
+      else if (message.mode === 'edit' && result.status === 'found') params.set('edit', result.extensionStudentId);
+      else throw new Error('请先关联插件学生。');
+      await chrome.tabs.create({ url: chrome.runtime.getURL(`popup.html?${params}`), index: sender.tab.index + 1 });
+      return true;
+    }
+    if (message.action === 'OPEN') {
+      if (result.status !== 'found') throw new Error('请先关联插件学生。');
+      if (!result.links.some(link => link.kind === message.kind)) throw new Error('此资源尚未配置有效网址。');
+      if (!await open(result.extensionStudentId, message.kind, { tab: { active: !message.background, index: sender.tab.index } })) throw new Error('打开资源失败。');
+      return true;
+    }
+    throw new Error('操作无效。');
+  });
+}
 
 // 课程表页面（content/schedule.js）发来的请求：按姓名查链接、打开链接、打开管理页
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  if (message?.type === 'ZYZD_SCHEDULE') {
+    scheduleRequest(message, sender).then(data => reply({ ok: true, data }), error => reply({ ok: false, error: error.message }));
+    return true;
+  }
+  if (!['ZYZD_LOOKUP', 'ZYZD_OPEN', 'ZYZD_MANAGE'].includes(message?.type)) return false;
+  if (!allowedScheduleSender(sender)) { reply(null); return false; }
   (async () => {
     if (message?.type === 'ZYZD_LOOKUP') {
       const data = await load();

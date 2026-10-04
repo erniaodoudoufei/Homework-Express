@@ -1,4 +1,5 @@
 import { KINDS, load, save, mutate, upsert, search, targetUrl, open, zhinengFromChapter, shortGrade, parseTitle, validateImport, buttonLabel, isZujuanChapter, gradeGroup, GROUPS, OTHER_GROUP } from './store.js';
+import { BINDINGS_KEY, validateBindings } from './schedule-links.js';
 
 const $ = selector => document.querySelector(selector);
 const full = location.search.includes('full');
@@ -351,7 +352,10 @@ $('#manage').addEventListener('click', () => { if (stack.at(-1) !== 'manage') pu
 $('#manage-new-profile').addEventListener('click', () => editProfile(null));
 $('#open-full').addEventListener('click', () => chrome.runtime.openOptionsPage());
 $('#export').addEventListener('click', async () => {
-  const blob = new Blob([JSON.stringify(await load(), null, 2)], { type: 'application/json' });
+  const backup = await load();
+  const stored = await chrome.storage.local.get(BINDINGS_KEY);
+  backup.scheduleBindings = validateBindings(stored[BINDINGS_KEY], backup);
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
   const a = h('a', { href: URL.createObjectURL(blob), download: `作业直达备份-${new Date().toISOString().slice(0, 10)}.json` });
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
@@ -361,12 +365,16 @@ $('#import').addEventListener('change', async e => {
   const file = e.target.files[0];
   e.target.value = '';
   if (!file) return;
-  let incoming;
-  try { incoming = validateImport(JSON.parse(await file.text())); }
+  let incoming, bindings;
+  try {
+    const raw = JSON.parse(await file.text());
+    incoming = validateImport(raw);
+    bindings = validateBindings(raw.scheduleBindings, incoming);
+  }
   catch (error) { return setStatus('#backup-status', `导入失败：${error.message}`, true); }
   setStatus('#backup-status', `备份里有 ${incoming.students.length} 个学生、${incoming.profiles.length} 个档案，会替换当前数据。`);
   $('#backup-status').append(' ', h('button', { className: 'ghost', textContent: '确认导入', onclick: async () => {
-    await save(incoming);
+    await chrome.storage.local.set({ data: incoming, [BINDINGS_KEY]: bindings });
     data = await load();
     renderManage();
     setStatus('#backup-status', '导入完成。');
