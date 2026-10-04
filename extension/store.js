@@ -117,6 +117,15 @@ export function gradeGroup(profile) {
   return OTHER_GROUP;
 }
 
+// 课程表页面按姓名找学生：去掉空白后姓名完全相同，或等于「搜索别名」里的某一项（别名可用逗号、空格分隔）
+export function findStudentByName(data, name) {
+  const key = (name || '').replace(/\s+/g, '');
+  if (!key) return null;
+  return data.students.find(s => s.name.replace(/\s+/g, '') === key)
+    || data.students.find(s => (s.alias || '').split(/[,，、\s]+/).some(a => a && a === key))
+    || null;
+}
+
 // 按钮文字：档案可自定义（非学科网学生用，如「Claude 作业」），没填用默认名
 export const buttonLabel = (profile, kind) => profile?.labels?.[kind]?.trim() || KINDS[kind].name;
 

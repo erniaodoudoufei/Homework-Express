@@ -382,5 +382,9 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
 });
 
 data = await load();
-if (!await restoreDraft()) show('list');
+// 从课程表页面打开的管理页：?add=姓名 直接新增学生，?edit=学生id 直接编辑
+const entry = new URLSearchParams(location.search);
+if (entry.get('add')) newStudent(entry.get('add'));
+else if (entry.get('edit') && data.students.some(s => s.id === entry.get('edit'))) editStudent(entry.get('edit'));
+else if (!await restoreDraft()) show('list');
 if (stack.at(-1) === 'profile') describeCurrentPage();

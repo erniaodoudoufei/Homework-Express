@@ -1,4 +1,37 @@
-import { KINDS, SEED, load, save, mutate, search, open, targetUrl, buttonLabel, isZujuanChapter, isZujuanZhineng, zhinengFromChapter, parseChapterPage } from './store.js';
+import { KINDS, SEED, load, save, mutate, search, open, targetUrl, buttonLabel, isZujuanChapter, isZujuanZhineng, zhinengFromChapter, parseChapterPage, findStudentByName, gradeGroup } from './store.js';
+
+// 课程表页面（content/schedule.js）发来的请求：按姓名查链接、打开链接、打开管理页
+chrome.runtime.onMessage.addListener((message, sender, reply) => {
+  (async () => {
+    if (message?.type === 'ZYZD_LOOKUP') {
+      const data = await load();
+      const student = findStudentByName(data, message.name);
+      if (!student) return { found: false };
+      const profile = data.profiles.find(p => p.id === student.profileId);
+      return {
+        found: true,
+        studentId: student.id,
+        studentName: student.name,
+        profileName: profile?.name || '',
+        color: gradeGroup(profile).color,
+        links: Object.keys(KINDS).filter(kind => targetUrl(profile, kind)).map(kind => ({ kind, label: buttonLabel(profile, kind) }))
+      };
+    }
+    if (message?.type === 'ZYZD_OPEN') {
+      const tab = sender.tab;
+      return { ok: await open(message.studentId, message.kind, { tab: { active: !message.background, index: tab?.index } }) };
+    }
+    if (message?.type === 'ZYZD_MANAGE') {
+      const params = new URLSearchParams({ full: '' });
+      if (message.edit) params.set('edit', message.edit);
+      if (message.add) params.set('add', message.add);
+      await chrome.tabs.create({ url: chrome.runtime.getURL(`popup.html?${params}`), ...(sender.tab ? { index: sender.tab.index + 1 } : {}) });
+      return { ok: true };
+    }
+    return null;
+  })().then(reply, () => reply(null));
+  return true;
+});
 
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   const data = await load();
